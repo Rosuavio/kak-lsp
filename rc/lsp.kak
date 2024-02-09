@@ -113,40 +113,140 @@ info=$lsp_info \
     diagnostics=$lsp_diagnostics \
     code_lenses=$lsp_code_lenses \
     awk 'BEGIN {
-        info = ENVIRON["info"]
-        diagnostics = ENVIRON["diagnostics"];
-        code_lenses = ENVIRON["code_lenses"];
-        max_lines = ENVIRON["kak_opt_lsp_hover_max_lines"];
+        diagnostic_data = ENVIRON["diagnostics"]
+        code_lenses = ENVIRON["code_lenses"]
+        code_actions = ENVIRON["kak_opt_lsp_modeline_code_actions"]
+        message_requests = ENVIRON["kak_opt_lsp_modeline_message_requests"]
+        max_lines = ENVIRON["kak_opt_lsp_hover_max_lines"]
 
-        r = ""
-        lines = 0
-        if (diagnostics) {
-            r = r "{+b@InfoDefault}Diagnostics{InfoDefault} (shortcut e):\n" diagnostics "\n"
-            diagnostics_lines = split(diagnostics, _, /\n/)
-            lines += 1 + diagnostics_lines
+        info_lines = split(ENVIRON["info"], info_data_line, /\n/)
+
+        diagnostic_lines = split(diagnostic_data, diagnostic_data_line, /\n/)
+
+        # If there is a max_lines for the entire hover then we see if we need
+        # to truncate the info and/or diagnostic lines to fit everything
+        # (including the static lines) in the hover.
+        # NOTE: We prioritize displaing diagnostic lines, truncating all of the
+        # info lines before truncating any diagnostic lines.
+        if(max_lines > 0) {
+            # Entire amount of lines available for output in the hover box.
+            # Remove two lines for the top and bottom boarders of the hover box.
+            available_lines = max(0, max_lines - 2)
+
+            # How many static lines will be in the hover box regardless the
+            # amount of info and diagnostic lines.
+            required_lines = 0
+
+            # A line for the "Hover info truncated" message
+            if (info_truncated == 1) required_lines++
+            # A line for the "Diagnostics (shortcut e):" message
+            if (diagnostic_data) required_lines++
+            # A line for the "Hover diagnostics truncated" message
+            if (diagnostics_truncated == 1) required_lines++
+            # A line for the "Code Lenses available" message
+            if (code_lenses) required_lines++
+            # A line for the "Code Actions available" message
+            if (code_actions) required_lines++
+            # A line for the "There are unread messages" message
+            if (message_requests) required_lines++
+
+            # How many more lines are we trying to output than is available.
+            extra_lines = max(0, required_lines + info_lines + diagnostic_lines - available_lines)
+
+            if (extra_lines > 0) {
+                # If the info has not already been maked to be truncated we mark
+                # it to be truncated, and add to the extra_lines.
+                if (info_truncated == 0) {
+                    info_truncated = 1
+                    extra_lines++
+                }
+
+                lines_to_remove = min(info_lines, extra_lines)
+                info_lines = max(0, info_lines - lines_to_remove)
+                extra_lines = max(0, extra_lines - lines_to_remove)
+            }
+
+            # If there are still extra_lines requested we remove as many
+            # as needed from diagnostics.
+            if (extra_lines > 0) {
+                # If the diagnostics has not already been maked to be truncated
+                # we mark it to be truncated, and add to the extra_lines.
+                if (diagnostics_truncated == 0) {
+                    diagnostics_truncated = 1
+                    extra_lines++
+                }
+
+                lines_to_remove = min(diagnostic_lines, extra_lines)
+                diagnostic_lines = max(0, diagnostic_lines - lines_to_remove)
+                extra_lines = max(0, diagnostic_lines - lines_to_remove)
+            }
         }
+
+        # Track if there is anything in the hover, so we know when to insert
+        # a new-line character.
+        output_in_hover = 0
+
+        if (info_lines) {
+            printf info_data_line[1]
+            for (i = 2; i <= info_lines; i++) {
+                printf "%s%s", "\n", info_data_line[i]
+            }
+            output_in_hover = 1
+        }
+
+        if (info_truncated == 1) {
+            if (output_in_hover == 1) printf "\n"
+            printf "{+i@InfoDefault}Hover info truncated, use lsp-hover-buffer (shortcut H) for full hover info"
+            output_in_hover = 1
+        }
+
+        if (diagnostic_data) {
+            if (output_in_hover == 1) printf "\n"
+            printf "{+b@InfoDefault}Diagnostics{InfoDefault} (shortcut e):"
+
+            if (diagnostic_lines) {
+                printf "\n"
+                printf diagnostic_data_line[1]
+                for (i = 2; i <= diagnostic_lines; i++) {
+                    printf "%s%s", "\n", diagnostic_data_line[i]
+                }
+            }
+
+            if (diagnostics_truncated == 1) {
+                printf "\n"
+                printf "{+i@InfoDefault}Hover diagnostics truncated, use lsp-hover-buffer (shortcut H) for full hover info"
+            }
+
+            output_in_hover = 1
+        }
+
         if (code_lenses) {
-            r = r "Code Lenses available (shortcut l)\n"
-            lines++
+            if (output_in_hover == 1) printf "\n"
+            printf "Code Lenses available (shortcut l)"
+            output_in_hover = 1
         }
-        if (ENVIRON["kak_opt_lsp_modeline_code_actions"]) {
-            r = r "Code Actions available (shortcut a)\n"
-            lines++
+        if (code_actions) {
+            if (output_in_hover == 1) printf "\n"
+            printf "Code Actions available (shortcut a)"
+            output_in_hover = 1
         }
+        if (message_requests) {
+            if (output_in_hover == 1) printf "\n"
+            printf "There are unread messages (use lsp-show-message-request-next to read)"
+            output_in_hover = 1
+        }
+    }
 
-        if (ENVIRON["kak_opt_lsp_modeline_message_requests"]) {
-            r = r "There are unread messages (use lsp-show-message-request-next to read)\n"
-            lines++
-        }
+    function max(x, y) {
+        return x > y ? x : y
+    }
 
-        info_lines = split(info, info_line, /\n/)
-        for (i = 1; i <= info_lines && (max_lines <= 0 || i+lines+2 <= max_lines); i++)
-            print info_line[i]
-        if (i < info_lines || r)
-            printf "\n"
-        if (i < info_lines)
-            printf "{+i@InfoDefault}Hover info truncated, use lsp-hover-buffer (shortcut H) for full info\n"
-        printf "%s", r
+    function min(x, y) {
+        return x < y ? x : y
+    }
+
+    function is_truncated(max, lines) {
+        return max > 0 && lines > max
     }'
 }
 # If you want to see only hover info, try
@@ -1653,7 +1753,7 @@ define-command -hidden lsp-show-hover -params 4 -docstring %{
     lsp_info=$2
     lsp_diagnostics=$3
     lsp_code_lenses=$4
-    content=$(eval "${kak_opt_lsp_show_hover_format}") # kak_opt_lsp_hover_max_lines kak_opt_lsp_modeline_code_actions kak_opt_lsp_modeline_message_requests
+    content=$(eval "${kak_opt_lsp_show_hover_format}") # kak_opt_lsp_hover_max_lines kak_opt_lsp_hover_max_info_lines kak_opt_lsp_hover_max_diagnostic_lines kak_opt_lsp_modeline_code_actions kak_opt_lsp_modeline_message_requests
     # remove leading whitespace characters
     content="${content#"${content%%[![:space:]]*}"}"
 

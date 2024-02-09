@@ -1,5 +1,8 @@
 ## Unreleased
 
+Breaking changes:
+- `lsp_hover_max_lines` now limits the size of the hover box spawned by `lsp-hover`, limiting lines of diagnostics as well as lines of information.
+
 Additions:
 - `lsp-document-symbols` now renders symbols in a tree.
 - `lsp-code-lens` can now run the test at cursor with `rust-analyzer`, provided https://gitlab.com/Screwtapello/kakoune-cargo is installed.
