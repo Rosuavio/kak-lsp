@@ -119,7 +119,7 @@ Additions:
 
 Fixes:
 - `lsp-formatting` with `pylsp` now preserves cursor positions again (regressed in 12.1.0).
-- Inlay diagnostics are now disabled in insert mode, to avoid diagnotsics jumping around while typing (#605).
+- Inlay diagnostics are now disabled in insert mode, to avoid diagnostics jumping around while typing (#605).
 - The default config for `typescript-language-server` now supports TSX files (#211).
 - `lsp-object` (`]a` etc.) can now jump past the symbols sent by `pylsp`.
 - `texlab-forward-search`'s SyncTeX inverse search now works in more scenarios (#603).
